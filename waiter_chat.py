@@ -4,6 +4,19 @@ from pydantic import BaseModel
 import os, tempfile
 from openai import OpenAI
 
+
+from fastapi.middleware.cors import CORSMiddleware
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],   # allow all origins (for now, safe for dev)
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+
 app = FastAPI()
 
 # ---------- Models ----------
