@@ -1,47 +1,41 @@
-# waiter_chat.py
-from fastapi import FastAPI, HTTPException, UploadFile, File
-from pydantic import BaseModel
-import os, tempfile
-from openai import OpenAI
-
-
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from openai import OpenAI
+import os, tempfile
 
+# --- Init ---
+app = FastAPI()
+
+# --- CORS ---
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],   # allow all origins (for now, safe for dev)
+    allow_origins=["*"],   # allow all for dev
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+# --- OpenAI client ---
+OPENAI_KEY = os.getenv("OPENAI_API_KEY")
+client = OpenAI(api_key=OPENAI_KEY) if OPENAI_KEY else None
 
-
-app = FastAPI()
-
-# ---------- Models ----------
+# --- Request schema ---
 class ChatRequest(BaseModel):
     message: str
 
-# ---------- Health ----------
+# --- Endpoints ---
 @app.get("/health")
 def health():
-    has_key = os.getenv("OPENAI_API_KEY") is not None
-    return {"ok": True, "has_openai_key": has_key}
-
-# ---------- Chat ----------
-# keep history in memory (simple demo)
-chat_history = [
-    {"role": "system", "content": "You are WaiterBot, a helpful restaurant waiter. \
-Menu: Hainanese Chicken Rice (RM16), Penang Char Kuey Teow (RM18), Iced Lemon Tea (RM6). \
-Recommend dishes, answer casually, and remember previous orders in the conversation."}
-]
+    return {"ok": True}
 
 @app.post("/chat")
 def chat(req: ChatRequest):
+    if client is None:
+        raise HTTPException(status_code=500, detail="OPENAI_API_KEY not set")
     try:
         result = client.chat.completions.create(
-            model="gpt-4o",   # upgraded from gpt-4o-mini
+            model="gpt-4o",   # upgraded model
             messages=[
                 {"role": "system", "content": "You are WaiterBot, a friendly restaurant waiter. Suggest menu items and answer questions."},
                 {"role": "user", "content": req.message},
@@ -52,30 +46,20 @@ def chat(req: ChatRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Chat failed: {e}")
 
-
-# ---------- Transcribe ----------
-OPENAI_KEY = os.getenv("OPENAI_API_KEY")
-client = OpenAI(api_key=OPENAI_KEY) if OPENAI_KEY else None
-
 @app.post("/transcribe")
-async def transcribe(file: UploadFile = File(...)):
+async def transcribe(file: bytes = None):
     if client is None:
-        raise HTTPException(status_code=501, detail="OPENAI_API_KEY not set on server")
-
+        raise HTTPException(status_code=500, detail="OPENAI_API_KEY not set")
     try:
-        raw = await file.read()
-        # write to a temporary file for OpenAI client
         with tempfile.NamedTemporaryFile(delete=False, suffix=".m4a") as tmp:
-            tmp.write(raw)
+            tmp.write(file)
             tmp_path = tmp.name
-
         with open(tmp_path, "rb") as fh:
             result = client.audio.transcriptions.create(
-                model="whisper-1",  # you can also try gpt-4o-mini-transcribe
+                model="whisper-1",
                 file=fh,
             )
         text = getattr(result, "text", "").strip() or "(empty)"
         return {"text": text}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Transcription failed: {e}")
-
