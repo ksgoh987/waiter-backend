@@ -46,19 +46,26 @@ def chat(req: ChatRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Chat failed: {e}")
 
+from fastapi import UploadFile, File
+
 @app.post("/transcribe")
-async def transcribe(file: bytes = None):
+async def transcribe(file: UploadFile = File(...)):
     if client is None:
         raise HTTPException(status_code=500, detail="OPENAI_API_KEY not set")
+
     try:
+        raw = await file.read()
+        # Write to temp file
         with tempfile.NamedTemporaryFile(delete=False, suffix=".m4a") as tmp:
-            tmp.write(file)
+            tmp.write(raw)
             tmp_path = tmp.name
+
         with open(tmp_path, "rb") as fh:
             result = client.audio.transcriptions.create(
                 model="whisper-1",
                 file=fh,
             )
+
         text = getattr(result, "text", "").strip() or "(empty)"
         return {"text": text}
     except Exception as e:
