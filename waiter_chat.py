@@ -39,26 +39,18 @@ Recommend dishes, answer casually, and remember previous orders in the conversat
 
 @app.post("/chat")
 def chat(req: ChatRequest):
-    if client is None:
-        return {"reply": f"Echo: {req.message}"}
-
     try:
-        # add user message to history
-        chat_history.append({"role": "user", "content": req.message})
-
         result = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=chat_history,
+            model="gpt-4o",   # upgraded from gpt-4o-mini
+            messages=[
+                {"role": "system", "content": "You are WaiterBot, a friendly restaurant waiter. Suggest menu items and answer questions."},
+                {"role": "user", "content": req.message},
+            ]
         )
-
         reply = result.choices[0].message.content
-
-        # add assistant reply to history
-        chat_history.append({"role": "assistant", "content": reply})
-
         return {"reply": reply}
     except Exception as e:
-        return {"reply": f"(fallback) Echo: {req.message}. Error: {e}"}
+        raise HTTPException(status_code=500, detail=f"Chat failed: {e}")
 
 
 # ---------- Transcribe ----------
